@@ -39,6 +39,13 @@ class ReminderTracker:
         ).fetchone()
         return row is not None
 
+    def was_policy_sent(self, policy_number: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM sent_reminders WHERE policy_number = ?",
+            (policy_number,),
+        ).fetchone()
+        return row is not None
+
     def get_record(self, policy_number: str, reminder_days: int) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT policy_number, phone, reminder_days, sent_at FROM sent_reminders WHERE policy_number = ? AND reminder_days = ?",
