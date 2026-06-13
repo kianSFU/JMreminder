@@ -278,3 +278,93 @@ class TestMobileFriendlyClickPage:
         resp = app_client.get("/click/POL-001")
         body = resp.text.lower()
         assert "max-width" in body or "width: 100%" in body or "responsive" in body
+
+
+class TestSendResultPageUI:
+    """AR-9 AC: /send result page includes navigation back to Upload and Dashboard, and uses shared CSS."""
+
+    @patch("autoremind.sms.Client")
+    def test_send_result_includes_upload_link(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        resp = app_client.post("/send")
+        assert 'href="/"' in resp.text
+
+    @patch("autoremind.sms.Client")
+    def test_send_result_includes_dashboard_link(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        resp = app_client.post("/send")
+        assert 'href="/dashboard"' in resp.text
+
+    @patch("autoremind.sms.Client")
+    def test_send_result_uses_base_css(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        resp = app_client.post("/send")
+        assert "<style>" in resp.text
+        assert "font-family" in resp.text
+
+
+class TestDashboardPageUI:
+    """AR-9 AC: /dashboard page includes shared navigation bar and CSS styling."""
+
+    def test_dashboard_includes_nav_bar(self, app_client):
+        resp = app_client.get("/dashboard")
+        assert "<nav>" in resp.text
+        assert 'href="/"' in resp.text
+        assert 'href="/dashboard"' in resp.text
+
+    def test_dashboard_uses_base_css(self, app_client):
+        resp = app_client.get("/dashboard")
+        assert "<style>" in resp.text
+        assert "font-family" in resp.text
+
+
+class TestDashboardClientDetails:
+    """AR-9 AC: Dashboard displays Name, Phone, Vehicle, Expiry, and Clicked At for each clicked renewal."""
+
+    @patch("autoremind.sms.Client")
+    def test_dashboard_shows_client_name(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        app_client.post("/send")
+        app_client.get("/click/POL-001")
+        resp = app_client.get("/dashboard")
+        assert "DOE JOHN" in resp.text
+
+    @patch("autoremind.sms.Client")
+    def test_dashboard_shows_phone(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        app_client.post("/send")
+        app_client.get("/click/POL-001")
+        resp = app_client.get("/dashboard")
+        assert "6041234567" in resp.text
+
+    @patch("autoremind.sms.Client")
+    def test_dashboard_shows_vehicle(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        app_client.post("/send")
+        app_client.get("/click/POL-001")
+        resp = app_client.get("/dashboard")
+        assert "Toyota" in resp.text
+        assert "Camry" in resp.text
+
+    @patch("autoremind.sms.Client")
+    def test_dashboard_shows_expiry_date(self, mock_twilio_cls, app_client, csv_upload_bytes):
+        mock_client = MagicMock()
+        mock_twilio_cls.return_value = mock_client
+        app_client.post("/upload", files={"file": ("r.csv", csv_upload_bytes, "text/csv")})
+        app_client.post("/send")
+        app_client.get("/click/POL-001")
+        resp = app_client.get("/dashboard")
+        expiry = (date.today() + timedelta(days=20)).isoformat()
+        assert expiry in resp.text
