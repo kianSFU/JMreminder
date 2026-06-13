@@ -107,3 +107,96 @@ class TestPolicySentLookup:
     def test_does_not_match_different_policy(self, tracker):
         tracker.record_sent(policy_number="POL-001", phone="6041234567", reminder_days=30)
         assert not tracker.was_policy_sent("POL-002")
+
+
+class TestSentRemindersClientDetails:
+    """AR-9 AC: sent_reminders table stores customer_name, make, model, and policy_expiry_date."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        return ReminderTracker(db_path=tmp_path / "reminders.db")
+
+    def test_record_sent_stores_customer_name(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        record = tracker.get_record(policy_number="POL-001", reminder_days=30)
+        assert record["customer_name"] == "John Doe"
+
+    def test_record_sent_stores_make(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        record = tracker.get_record(policy_number="POL-001", reminder_days=30)
+        assert record["make"] == "Toyota"
+
+    def test_record_sent_stores_model(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        record = tracker.get_record(policy_number="POL-001", reminder_days=30)
+        assert record["model"] == "Camry"
+
+    def test_record_sent_stores_policy_expiry_date(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        record = tracker.get_record(policy_number="POL-001", reminder_days=30)
+        assert record["policy_expiry_date"] == "2026-07-15"
+
+
+class TestDashboardDataQuery:
+    """AR-9 AC: Dashboard data joins clicks with sent_reminders to show client details."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        return ReminderTracker(db_path=tmp_path / "reminders.db")
+
+    def test_get_dashboard_data_returns_client_details(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        tracker.record_click(policy_number="POL-001")
+        data = tracker.get_dashboard_data()
+        assert len(data) == 1
+        entry = data[0]
+        assert entry["customer_name"] == "John Doe"
+        assert entry["phone"] == "6041234567"
+        assert entry["make"] == "Toyota"
+        assert entry["model"] == "Camry"
+        assert entry["policy_expiry_date"] == "2026-07-15"
+        assert entry["clicked_at"] is not None
+
+    def test_get_dashboard_data_excludes_unclicked(self, tracker):
+        tracker.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        data = tracker.get_dashboard_data()
+        assert len(data) == 0
+
+    def test_dashboard_data_persists_across_instances(self, tmp_path):
+        db = tmp_path / "reminders.db"
+        tracker1 = ReminderTracker(db_path=db)
+        tracker1.record_sent(
+            policy_number="POL-001", phone="6041234567", reminder_days=30,
+            customer_name="John Doe", make="Toyota", model="Camry",
+            policy_expiry_date="2026-07-15",
+        )
+        tracker1.record_click(policy_number="POL-001")
+
+        tracker2 = ReminderTracker(db_path=db)
+        data = tracker2.get_dashboard_data()
+        assert len(data) == 1
+        assert data[0]["customer_name"] == "John Doe"

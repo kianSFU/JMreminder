@@ -3,6 +3,10 @@ import os
 import tempfile
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse
 
@@ -54,24 +58,20 @@ _NAV = '<nav><a href="/">Upload</a> <a href="/dashboard">Dashboard</a></nav>'
 
 
 def _render_actionable_rows(records: list[RenewalRecord]) -> str:
-    rows = ""
-    for r in records:
-        rows += (
-            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
-            f"<td>{r.phone}</td><td>{r.make} {r.model}</td>"
-            f"<td>{r.policy_expiry_date}</td></tr>\n"
-        )
-    return rows
+    return "".join(
+        f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
+        f"<td>{r.phone}</td><td>{r.make} {r.model}</td>"
+        f"<td>{r.policy_expiry_date}</td></tr>\n"
+        for r in records
+    )
 
 
 def _render_skipped_rows(records: list[RenewalRecord]) -> str:
-    rows = ""
-    for r in records:
-        rows += (
-            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
-            f"<td>invalid/missing</td></tr>\n"
-        )
-    return rows
+    return "".join(
+        f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
+        f"<td>invalid/missing</td></tr>\n"
+        for r in records
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -136,27 +136,47 @@ async def upload(file: UploadFile = File(...)):
 </body></html>""")
 
 
+def _send_single_reminder(record: RenewalRecord, base_url: str) -> bool:
+    """Returns True if sent, False if skipped as duplicate."""
+    if _tracker.was_policy_sent(record.policy_number):
+        return False
+    first_name = parse_customer_name(record.customer_name) or record.customer_name
+    tracking_url = f"{base_url}/click/{record.policy_number}"
+    msg = format_message(
+        first_name=first_name,
+        make=record.make,
+        model=record.model,
+        expiry_date=record.policy_expiry_date,
+        tracking_url=tracking_url,
+    )
+    send_reminder(phone=record.phone, message=msg)
+    _tracker.record_sent(
+        policy_number=record.policy_number,
+        phone=record.phone,
+        reminder_days=DEFAULT_REMINDER_DAYS[0],
+        customer_name=record.customer_name,
+        make=record.make,
+        model=record.model,
+        policy_expiry_date=str(record.policy_expiry_date) if record.policy_expiry_date else "",
+    )
+    return True
+
+
 @app.post("/send", response_class=HTMLResponse)
 async def send():
-    sent_count = 0
-    skipped_count = 0
-    for r in _last_actionable:
-        if _tracker.was_policy_sent(r.policy_number):
-            skipped_count += 1
-            continue
-        first_name = parse_customer_name(r.customer_name) or r.customer_name
-        tracking_url = f"{get_base_url()}/click/{r.policy_number}"
-        msg = format_message(
-            first_name=first_name,
-            make=r.make,
-            model=r.model,
-            expiry_date=r.policy_expiry_date,
-            tracking_url=tracking_url,
-        )
-        send_reminder(phone=r.phone, message=msg)
-        _tracker.record_sent(policy_number=r.policy_number, phone=r.phone, reminder_days=DEFAULT_REMINDER_DAYS[0])
-        sent_count += 1
-    return HTMLResponse(content=f"<html><body>Sent {sent_count}. Skipped {skipped_count} duplicates.</body></html>")
+    base_url = get_base_url()
+    results = [_send_single_reminder(r, base_url) for r in _last_actionable]
+    sent_count = sum(results)
+    skipped_count = len(results) - sent_count
+    return HTMLResponse(content=f"""<html><head>
+<title>AutoRemind - Send Results</title>
+<style>{_BASE_CSS}</style>
+</head><body>
+<h1>AutoRemind</h1>
+{_NAV}
+<p>Sent {sent_count}. Skipped {skipped_count} duplicates.</p>
+<a href="/">Upload</a> <a href="/dashboard">Dashboard</a>
+</body></html>""")
 
 
 @app.get("/click/{policy_number}", response_class=HTMLResponse)
@@ -182,13 +202,31 @@ async def click(policy_number: str):
 </body></html>""")
 
 
+def _render_dashboard_rows(data: list[dict]) -> str:
+    def _row(d: dict) -> str:
+        vehicle = f"{d.get('make') or ''} {d.get('model') or ''}".strip()
+        return (
+            f"<tr><td>{d.get('policy_number', '')}</td>"
+            f"<td>{d.get('customer_name') or ''}</td>"
+            f"<td>{d.get('phone') or ''}</td>"
+            f"<td>{vehicle}</td>"
+            f"<td>{d.get('policy_expiry_date') or ''}</td>"
+            f"<td>{d.get('clicked_at', '')}</td></tr>\n"
+        )
+    return "".join(_row(d) for d in data)
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
-    clicks = _tracker.get_clicks()
-    rows_html = ""
-    for c in clicks:
-        rows_html += f"<tr><td>{c['policy_number']}</td><td>{c['clicked_at']}</td></tr>\n"
-    return HTMLResponse(content=f"""<html><body>
+    data = _tracker.get_dashboard_data()
+    rows_html = _render_dashboard_rows(data)
+    return HTMLResponse(content=f"""<html><head>
+<title>AutoRemind - Dashboard</title>
+<style>{_BASE_CSS}</style>
+</head><body>
+<h1>AutoRemind</h1>
+{_NAV}
 <h2>Clicked Renewals</h2>
-<table>{rows_html}</table>
+<table><tr><th>Policy</th><th>Name</th><th>Phone</th><th>Vehicle</th><th>Expiry</th><th>Clicked At</th></tr>
+{rows_html}</table>
 </body></html>""")
