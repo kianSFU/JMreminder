@@ -12,14 +12,22 @@ from autoremind.parser import (
     filter_skipped_renewals,
     parse_customer_name,
 )
-from autoremind.sms import format_message, send_reminder
+from autoremind.sms import format_message, send_reminder, DEFAULT_REMINDER_DAYS
 from autoremind.tracker import ReminderTracker
 
 app = FastAPI()
 
 _last_actionable: list[RenewalRecord] = []
 _last_skipped: list[RenewalRecord] = []
-_tracker = ReminderTracker(db_path=Path(tempfile.gettempdir()) / "autoremind_clicks.db")
+
+
+def get_db_path() -> Path:
+    data_dir = Path(__file__).resolve().parent.parent / "data"
+    data_dir.mkdir(exist_ok=True)
+    return data_dir / "autoremind.db"
+
+
+_tracker = ReminderTracker(db_path=get_db_path())
 
 _BASE_CSS = """
   body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
@@ -114,7 +122,12 @@ async def upload(file: UploadFile = File(...)):
 
 @app.post("/send", response_class=HTMLResponse)
 async def send():
+    sent_count = 0
+    skipped_count = 0
     for r in _last_actionable:
+        if _tracker.was_policy_sent(r.policy_number):
+            skipped_count += 1
+            continue
         first_name = parse_customer_name(r.customer_name) or r.customer_name
         tracking_url = f"/click/{r.policy_number}"
         msg = format_message(
@@ -125,7 +138,9 @@ async def send():
             tracking_url=tracking_url,
         )
         send_reminder(phone=r.phone, message=msg)
-    return HTMLResponse(content=f"<html><body>Sent {len(_last_actionable)} messages</body></html>")
+        _tracker.record_sent(policy_number=r.policy_number, phone=r.phone, reminder_days=DEFAULT_REMINDER_DAYS[0])
+        sent_count += 1
+    return HTMLResponse(content=f"<html><body>Sent {sent_count}. Skipped {skipped_count} duplicates.</body></html>")
 
 
 @app.get("/click/{policy_number}", response_class=HTMLResponse)

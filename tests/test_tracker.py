@@ -84,3 +84,26 @@ class TestClickTracking:
         tracker.record_click(policy_number="POL-001")
         clicks = tracker.get_clicks()
         assert any(c["policy_number"] == "POL-001" for c in clicks)
+
+
+class TestPolicySentLookup:
+    """AC (AR-5): Tracker can check if any reminder was sent for a policy, regardless of reminder tier."""
+
+    @pytest.fixture
+    def tracker(self, tmp_path):
+        return ReminderTracker(db_path=tmp_path / "reminders.db")
+
+    def test_returns_true_when_reminder_sent(self, tracker):
+        tracker.record_sent(policy_number="POL-001", phone="6041234567", reminder_days=30)
+        assert tracker.was_policy_sent("POL-001")
+
+    def test_returns_false_when_no_reminder_sent(self, tracker):
+        assert not tracker.was_policy_sent("POL-001")
+
+    def test_matches_any_reminder_tier(self, tracker):
+        tracker.record_sent(policy_number="POL-001", phone="6041234567", reminder_days=14)
+        assert tracker.was_policy_sent("POL-001")
+
+    def test_does_not_match_different_policy(self, tracker):
+        tracker.record_sent(policy_number="POL-001", phone="6041234567", reminder_days=30)
+        assert not tracker.was_policy_sent("POL-002")
