@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 from pathlib import Path
 
@@ -16,6 +17,11 @@ from autoremind.sms import format_message, send_reminder, DEFAULT_REMINDER_DAYS
 from autoremind.tracker import ReminderTracker
 
 app = FastAPI()
+
+
+def get_base_url() -> str:
+    url = os.environ.get("BASE_URL", "http://localhost:8000")
+    return url.rstrip("/")
 
 _last_actionable: list[RenewalRecord] = []
 _last_skipped: list[RenewalRecord] = []
@@ -45,6 +51,27 @@ _BASE_CSS = """
 """
 
 _NAV = '<nav><a href="/">Upload</a> <a href="/dashboard">Dashboard</a></nav>'
+
+
+def _render_actionable_rows(records: list[RenewalRecord]) -> str:
+    rows = ""
+    for r in records:
+        rows += (
+            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
+            f"<td>{r.phone}</td><td>{r.make} {r.model}</td>"
+            f"<td>{r.policy_expiry_date}</td></tr>\n"
+        )
+    return rows
+
+
+def _render_skipped_rows(records: list[RenewalRecord]) -> str:
+    rows = ""
+    for r in records:
+        rows += (
+            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
+            f"<td>invalid/missing</td></tr>\n"
+        )
+    return rows
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -87,20 +114,9 @@ async def upload(file: UploadFile = File(...)):
     _last_actionable = actionable
     _last_skipped = skipped
 
-    rows_html = ""
-    for r in actionable:
-        rows_html += (
-            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
-            f"<td>{r.phone}</td><td>{r.make} {r.model}</td>"
-            f"<td>{r.policy_expiry_date}</td></tr>\n"
-        )
+    rows_html = _render_actionable_rows(actionable)
 
-    skipped_html = ""
-    for r in skipped:
-        skipped_html += (
-            f"<tr><td>{r.policy_number}</td><td>{r.customer_name}</td>"
-            f"<td>invalid/missing</td></tr>\n"
-        )
+    skipped_html = _render_skipped_rows(skipped)
 
     return HTMLResponse(content=f"""<html><head>
 <title>AutoRemind - Upload Results</title>
@@ -129,7 +145,7 @@ async def send():
             skipped_count += 1
             continue
         first_name = parse_customer_name(r.customer_name) or r.customer_name
-        tracking_url = f"/click/{r.policy_number}"
+        tracking_url = f"{get_base_url()}/click/{r.policy_number}"
         msg = format_message(
             first_name=first_name,
             make=r.make,
@@ -146,9 +162,24 @@ async def send():
 @app.get("/click/{policy_number}", response_class=HTMLResponse)
 async def click(policy_number: str):
     _tracker.record_click(policy_number=policy_number)
-    return HTMLResponse(
-        content=f"<html><body><h1>Thank you!</h1><p>Your broker will be in touch about your renewal.</p></body></html>"
-    )
+    return HTMLResponse(content=f"""<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Johnston Meier Insurance — Renewal Confirmed</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; margin: 0; padding: 40px 20px; background: #f7fafc; color: #1a365d; }}
+  .container {{ max-width: 480px; margin: 0 auto; background: white; border-radius: 8px; padding: 40px 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }}
+  h1 {{ font-size: 24px; margin-bottom: 8px; }}
+  .subtitle {{ color: #4a5568; font-size: 14px; margin-bottom: 32px; }}
+  p {{ color: #2d3748; line-height: 1.6; }}
+</style>
+</head><body>
+<div class="container">
+  <h1>Johnston Meier Insurance</h1>
+  <p class="subtitle">Protecting what matters</p>
+  <h2>Thank you!</h2>
+  <p>Your broker will be in touch about your renewal.</p>
+</div>
+</body></html>""")
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
