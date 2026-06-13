@@ -1,3 +1,6 @@
+import csv
+from pathlib import Path
+
 import pytest
 import openpyxl
 from datetime import date, timedelta
@@ -116,5 +119,52 @@ def sample_xlsx_multiple_valid(tmp_path):
             ["SMITH JANE", '="6049876543"', date.today() + timedelta(days=14), "POL-201", "Honda", "Civic", "Renewal", "Active", "Y", None],
             ["LEE ALEX", '="7781112222"', date.today() + timedelta(days=3), "POL-202", "Ford", "Focus", "Renewal", "Active", "Y", None],
             ["WONG SAM", '="6045556666"', date.today() + timedelta(days=60), "POL-203", "BMW", "X3", "Renewal", "Active", "Y", None],
+        ],
+    )
+
+
+def _create_csv(path, rows):
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(AUTOLINK_COLUMNS)
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+@pytest.fixture
+def sample_csv(tmp_path):
+    """Single valid renewal record as CSV — mirrors sample_xlsx."""
+    expiry = date.today() + timedelta(days=20)
+    return _create_csv(
+        tmp_path / "renewals.csv",
+        [
+            [
+                "DOE JOHN MICHAEL",
+                '="6041234567"',
+                expiry.isoformat(),
+                "POL-001",
+                "Toyota",
+                "Camry",
+                "Renewal",
+                "Active",
+                "Y",
+                "",
+            ],
+        ],
+    )
+
+
+@pytest.fixture
+def sample_csv_mixed(tmp_path):
+    """Multiple CSV records with varying states — mirrors sample_xlsx_mixed."""
+    expiry = date.today() + timedelta(days=20)
+    return _create_csv(
+        tmp_path / "renewals_mixed.csv",
+        [
+            ["DOE JOHN", '="6041234567"', expiry.isoformat(), "POL-001", "Toyota", "Camry", "Renewal", "Active", "Y", ""],
+            ["SMITH JANE", '="6049876543"', expiry.isoformat(), "POL-002", "Honda", "Civic", "New Business", "Active", "Y", ""],
+            ["LEE ALEX", '="7781112222"', expiry.isoformat(), "POL-003", "Ford", "Focus", "Renewal", "Active", "Y", date.today().isoformat()],
+            ["WONG SAM", "", expiry.isoformat(), "POL-004", "BMW", "X3", "Renewal", "Active", "Y", ""],
         ],
     )

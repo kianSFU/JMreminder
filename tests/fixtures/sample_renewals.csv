@@ -1,0 +1,5 @@
+CustomerName,CustomerHomePhone,PolicyExpiryDate,PolicyNumber,Make,Model,TransactionTypeDesc,PolicyStatusDesc,CustomerConsentYN,DateRenewed
+DOE JOHN MICHAEL,="6041234567",2026-07-15,POL-001,Toyota,Camry,Renewal,Active,Y,
+SMITH JANE,="6049876543",2026-07-15,POL-002,Honda,Civic,New Business,Active,Y,
+LEE ALEX,="7781112222",2026-07-15,POL-003,Ford,Focus,Renewal,Active,Y,2026-06-01
+WONG SAM,,2026-07-15,POL-004,BMW,X3,Renewal,Active,Y,
