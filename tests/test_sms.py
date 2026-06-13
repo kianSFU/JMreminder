@@ -129,3 +129,48 @@ class TestSmsSending:
         send_reminder(phone="6041234567", message="Renewal reminder for John")
         call_kwargs = mock_client.messages.create.call_args
         assert "Renewal reminder for John" in str(call_kwargs)
+
+
+class TestMessageWithTrackingLink:
+    """AC (AR-3): SMS includes a unique tracking link per client."""
+
+    def test_message_includes_link(self):
+        msg = format_message(
+            first_name="John",
+            make="Toyota",
+            model="Camry",
+            expiry_date=date(2026, 7, 15),
+            tracking_url="https://example.com/click/POL-001",
+        )
+        assert "https://example.com/click/POL-001" in msg
+
+    def test_link_is_unique_per_policy(self):
+        msg1 = format_message(
+            first_name="John",
+            make="Toyota",
+            model="Camry",
+            expiry_date=date(2026, 7, 15),
+            tracking_url="https://example.com/click/POL-001",
+        )
+        msg2 = format_message(
+            first_name="Jane",
+            make="Honda",
+            model="Civic",
+            expiry_date=date(2026, 7, 15),
+            tracking_url="https://example.com/click/POL-002",
+        )
+        assert "POL-001" in msg1
+        assert "POL-002" in msg2
+        assert "POL-001" not in msg2
+
+    def test_message_still_includes_client_name_and_date(self):
+        msg = format_message(
+            first_name="Sarah",
+            make="Hyundai",
+            model="Tucson",
+            expiry_date=date(2026, 8, 10),
+            tracking_url="https://example.com/click/POL-100",
+        )
+        assert "Sarah" in msg
+        assert "Hyundai" in msg
+        assert "Tucson" in msg

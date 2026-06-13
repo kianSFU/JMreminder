@@ -9,13 +9,23 @@ from autoremind.parser import RenewalRecord, parse_customer_name
 DEFAULT_REMINDER_DAYS = [30, 14, 3]
 
 
-def format_message(first_name: str, make: str, model: str, expiry_date: date) -> str:
+def format_message(
+    first_name: str,
+    make: str,
+    model: str,
+    expiry_date: date,
+    tracking_url: Optional[str] = None,
+) -> str:
     date_str = expiry_date.strftime("%B %d, %Y")
-    return (
+    msg = (
         f"Hi {first_name}, your ICBC policy for your {make} {model} "
         f"is up for renewal on {date_str}. "
-        f"Please contact Johnston Meier Insurance to renew."
     )
+    if tracking_url:
+        msg += f"Confirm your renewal here: {tracking_url}"
+    else:
+        msg += "Please contact Johnston Meier Insurance to renew."
+    return msg
 
 
 def get_due_reminders(
